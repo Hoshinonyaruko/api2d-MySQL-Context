@@ -58,12 +58,17 @@ def add_message(conversation_id, parent_message_id, text, role):
 
 def get_history(conversation_id, parent_message_id):
     cursor = mysql.get_db().cursor()
-    query = "SELECT text, role FROM messages WHERE conversation_id = %s AND id <= %s ORDER BY created_at ASC"
+    query = """SELECT text, role, created_at FROM messages
+               WHERE conversation_id = %s AND created_at <= (SELECT created_at FROM messages WHERE id = %s)
+               ORDER BY created_at ASC"""
     cursor.execute(query, (conversation_id, parent_message_id))
     rows = cursor.fetchall()
     history = []
     current_query = None
-    for text, role in rows:
+    previous_text = None
+    for text, role, created_at in rows:
+        if text == previous_text:  # Skip duplicate text
+            continue
         if role == "user":
             if current_query is not None:
                 history.append({"role": "user", "content": current_query})
@@ -73,6 +78,7 @@ def get_history(conversation_id, parent_message_id):
                 history.append({"role": "user", "content": current_query})
                 current_query = None
             history.append({"role": "assistant", "content": text})
+        previous_text = text
     if current_query is not None:
         history.append({"role": "user", "content": current_query})
     return history
